@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="KleeneStar.Seeder.Test/KleeneStar.Seeder.Test.csproj" />
+  <Project Path="KleeneStar.Seeder/KleeneStar.Seeder.csproj" />
+</Solution>
