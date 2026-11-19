@@ -10,7 +10,9 @@ namespace KleeneStar.Seeder
     /// groups and accounts, seven workspaces with their classes, fields, forms, workflows,
     /// priorities, security levels, templates, calendars and SLA policies, and the objects with
     /// values, history, labels, shares, comments, attachments, relations, sprints, views,
-    /// insights, saved searches, bookmarks, landing pages and workspace home pages.
+    /// insights, saved searches, bookmarks, pinned landing documents and workspace home pages.
+    /// The help pages of KleeneStar are not demo data; they are seeded by the plugin
+    /// <c>KleeneStar.Help</c>.
     /// </summary>
     /// <remarks>
     /// Runs after the base seed of the model (<see cref="KleeneStarDbSeeder.SeedAsync"/>), which
@@ -134,8 +136,9 @@ namespace KleeneStar.Seeder
             await Step(db, "tags", !db.ObjectTags.Any(), SeedTags);
             await Step(db, "shares and watchers", !db.ObjectShares.Any() && !db.ObjectWatchers.Any(), SeedSharesAndWatchers);
 
-            // every start: the landing labels name the landing pages, so the pages are saved first
-            await Step(db, "landing pages", true, SeedLandingPages);
+            // every start: the help pages moved into the plugin KleeneStar.Help, the copies an
+            // earlier seed wrote into the service desk leave the landing page; pinned documents
+            await Step(db, "retired landing pages", true, RetireLandingPages);
             await Step(db, "landing labels", true, SeedLandingLabels);
 
             await Step(db, "insights", !db.Insights.Any(), SeedInsights);

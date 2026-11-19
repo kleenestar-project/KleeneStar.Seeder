@@ -9,7 +9,7 @@ plugin adds everything that exists only to demonstrate or test the product.
 |Written by                                          |Data
 |----------------------------------------------------|-------------------------------------------------------------------
 |`KleeneStar.Model` (`KleeneStarDbSeeder.SeedAsync`) |maintenance record, branding record, administrators group (`Group.AdministratorsId`), built-in groups (`Group.AuthenticatedId`, `Group.AnonymousId`), administrator account (`KleeneStarDbSeeder.AdministratorId`, user `admin`, password `KleeneStarDbSeeder.InitialPassword`), password placeholder upgrade, status categories (ToDo, InProgress, Waiting, Done), relation catalog (eight `ObjectRelationType` rows), audit genesis event |
-|`KleeneStar.Seeder` (`DemoSeeder.SeedAsync`)        |workspace categories, tenants, demo groups (Engineering, Marketing, Support), demo accounts, deputy of the administrator, seven workspaces (`DemoSeeder.DemoWorkspaceIds`) with default grants, classes, fields, forms, security levels, templates, priorities, statuses, workflows, objects, object classifications, values, commits, labels, shares and watchers, landing pages and labels, insights, object views, sprints, saved searches, workspace bookmarks, calendars, SLA policies, comments, attachments, object relations, workspace home pages, audit event of the demo run 
+|`KleeneStar.Seeder` (`DemoSeeder.SeedAsync`)        |workspace categories, tenants, demo groups (Engineering, Marketing, Support), demo accounts, deputy of the administrator, seven workspaces (`DemoSeeder.DemoWorkspaceIds`) with default grants, classes, fields, forms, security levels, templates, priorities, statuses, workflows, objects, object classifications, values, commits, labels, shares and watchers, pinned landing documents, insights, object views, sprints, saved searches, workspace bookmarks, calendars, SLA policies, comments, attachments, object relations, workspace home pages, audit event of the demo run 
 
 ## Execution
 
@@ -35,8 +35,13 @@ to `DemoSeeder.SeedAsync`.
   demo workspace. Otherwise the seed writes nothing: the demo accounts sign in with a published
   password.
 - **Guards.** Each part runs only when its table (or its demo rows, for groups and accounts) is
-  empty. Landing pages, landing labels and workspace home pages run on every start and skip what
-  exists.
+  empty. The retirement of the former help pages, the pinned labels and the workspace home pages
+  run on every start and skip what exists.
+- **Help.** The help pages of KleeneStar are product content and belong to the plugin
+  `KleeneStar.Help` (workspace `HELP`, seed order 200, after this one). `RetireLandingPages`
+  archives the copies an earlier version of this seed wrote into the service desk (`SD-9000` to
+  `SD-9012`) and removes their help labels, provided a page still carries one and its seeded
+  title, so the help is not listed twice.
 - **Administrator.** The demo data references the base administrator by
   `KleeneStarDbSeeder.AdministratorId` and leaves the account unchanged; it only sets Alice
   Engineer as its deputy.

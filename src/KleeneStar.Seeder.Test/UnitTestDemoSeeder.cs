@@ -824,10 +824,9 @@ namespace KleeneStar.Seeder.Test
             }
         }
         /// <summary>
-        /// Verifies that the landing-page content is seeded: the help pages exist as documents,
-        /// each carries the reserved label of the column it belongs to, and a handful of
-        /// documents is pinned. The landing page reads objects by label, so a page without its
-        /// label is invisible to it even though the row exists.
+        /// Verifies that the landing content of the demo is the pinned documents only: the help
+        /// pages are seeded by the plugin KleeneStar.Help, so the demo writes no page into the
+        /// service desk that carries a help label. Every pinned object is an active document.
         /// </summary>
         [Fact]
         public async Task SeedLandingContent()
@@ -840,44 +839,11 @@ namespace KleeneStar.Seeder.Test
             // act
             await SeedAsync(db);
 
-            // validation — the help pages exist and are active documents carrying a description
-            var helpPages = db.Objects
-                .Where(x => x.Key.StartsWith("SD-9"))
-                .ToList();
+            // validation: no help page and no help label in the demo data
+            Assert.False(db.Objects.Any(x => x.Key.StartsWith("SD-9")));
+            Assert.False(db.ObjectTags.Any(x => x.Name == "Help" || x.Name == "FAQ" || x.Name == "First Steps"));
 
-            Assert.True(helpPages.Count >= 12, $"expected the help set, found {helpPages.Count} pages");
-            Assert.All(helpPages, x => Assert.Equal(Model.Entities.ObjectKind.Document, x.Kind));
-            Assert.All(helpPages, x => Assert.Equal(Model.Entities.WorkspaceState.Active, x.State));
-            Assert.All(helpPages, x => Assert.False(string.IsNullOrWhiteSpace(x.Description)));
-
-            // validation — no page carries markup: an answer is read where it stands, and a
-            // stray asterisk would be shown as written
-            Assert.All(helpPages, x => Assert.DoesNotContain("**", x.Description));
-
-            // validation — every column of the help area is filled
-            var labelled = db.ObjectTags
-                .Join(db.Objects, tag => tag.ObjectId, obj => obj.Id, (tag, obj) => new { obj.Key, tag.Name })
-                .Where(x => x.Key.StartsWith("SD-9"))
-                .ToList();
-
-            foreach (var label in new[] { "Help", "FAQ", "First Steps" })
-            {
-                Assert.True
-                (
-                    labelled.Count(x => x.Name == label) >= 3,
-                    $"expected several pages labelled {label}"
-                );
-            }
-
-            // validation — a page carries exactly one of the reserved labels, so it appears in
-            // one column rather than in two
-            foreach (var group in labelled.GroupBy(x => x.Key))
-            {
-                Assert.Single(group);
-            }
-
-            // validation — the pinned area has something to show, and every pinned object is an
-            // active document rather than an arbitrary row
+            // validation: the pinned area has something to show
             var pinned = db.ObjectTags
                 .Where(x => x.Name == "Pinned")
                 .Join(db.Objects, tag => tag.ObjectId, obj => obj.Id, (tag, obj) => obj)
@@ -889,9 +855,8 @@ namespace KleeneStar.Seeder.Test
         }
 
         /// <summary>
-        /// Verifies that seeding the landing content twice adds nothing the second time - the
-        /// step runs on every start so a later addition to the page set reaches an installation
-        /// that was seeded before it existed.
+        /// Verifies that seeding the landing content twice adds nothing the second time: the
+        /// step runs on every start.
         /// </summary>
         [Fact]
         public async Task SeedLandingContentIsIdempotent()
@@ -903,15 +868,62 @@ namespace KleeneStar.Seeder.Test
 
             await SeedAsync(db);
 
-            var pages = db.Objects.Count(x => x.Key.StartsWith("SD-9"));
-            var labels = db.ObjectTags.Count(x => x.Name == "Help" || x.Name == "FAQ" || x.Name == "First Steps" || x.Name == "Pinned");
+            var labels = db.ObjectTags.Count(x => x.Name == "Pinned");
 
             // act
             await SeedAsync(db);
 
             // validation
-            Assert.Equal(pages, db.Objects.Count(x => x.Key.StartsWith("SD-9")));
-            Assert.Equal(labels, db.ObjectTags.Count(x => x.Name == "Help" || x.Name == "FAQ" || x.Name == "First Steps" || x.Name == "Pinned"));
+            Assert.Equal(labels, db.ObjectTags.Count(x => x.Name == "Pinned"));
+        }
+
+        /// <summary>
+        /// Verifies that a help page an earlier seed wrote into the service desk is retired: its
+        /// help label is removed and it is archived, while a page somebody retitled keeps its
+        /// label and state.
+        /// </summary>
+        [Fact]
+        public async Task RetireLandingPagesArchivesTheFormerHelpPages()
+        {
+            // arrange
+            var connectionString = $"RetireLandingPages_{Guid.NewGuid()}";
+            var serviceDesk = Guid.Parse("F027A791-4219-4B1D-BA7C-2E7757091AAA");
+            var knowledge = Guid.Parse("4F80098A-C986-415A-9288-1C85232C27C9");
+
+            await using var db = InMemoryDbContextFactory.Create(connectionString);
+
+            await SeedAsync(db);
+
+            Model.Entities.Object legacy(string key, string summary) => new()
+            {
+                Id = Guid.NewGuid(),
+                Key = key,
+                Summary = summary,
+                Description = "Seeded before the help moved.",
+                Kind = Model.Entities.ObjectKind.Document,
+                State = Model.Entities.WorkspaceState.Active,
+                WorkspaceId = serviceDesk,
+                ClassId = knowledge,
+                Created = DateTime.UtcNow,
+                Updated = DateTime.UtcNow
+            };
+
+            var seeded = legacy("SD-9000", "Create an issue");
+            var rewritten = legacy("SD-9005", "Who may read my ticket?");
+
+            db.Objects.AddRange(seeded, rewritten);
+            db.ObjectTags.Add(new Model.Entities.ObjectTag { ObjectId = seeded.Id, Name = "Help", Color = "#0dcaf0", Created = DateTime.UtcNow });
+            db.ObjectTags.Add(new Model.Entities.ObjectTag { ObjectId = rewritten.Id, Name = "FAQ", Color = "#0dcaf0", Created = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+
+            // act
+            await SeedAsync(db);
+
+            // validation
+            Assert.Equal(Model.Entities.WorkspaceState.Archived, db.Objects.AsNoTracking().Single(x => x.Id == seeded.Id).State);
+            Assert.False(db.ObjectTags.Any(x => x.ObjectId == seeded.Id));
+            Assert.Equal(Model.Entities.WorkspaceState.Active, db.Objects.AsNoTracking().Single(x => x.Id == rewritten.Id).State);
+            Assert.True(db.ObjectTags.Any(x => x.ObjectId == rewritten.Id && x.Name == "FAQ"));
         }
 
         /// <summary>
@@ -1163,11 +1175,34 @@ namespace KleeneStar.Seeder.Test
 
             await SeedAsync(db);
 
-            var page = db.Objects.Single(o => o.Key == "SD-9000");
             var workspace = db.Workspaces.Single(w => w.Key == "SD");
+            var knowledge = db.Classes.Single(c => c.WorkspaceId == workspace.Id && c.Name == "Knowledge");
+            var page = new Model.Entities.Object
+            {
+                Id = Guid.NewGuid(),
+                Key = "SD-8999",
+                Summary = "A commented page",
+                Description = "Read and discussed.",
+                Kind = Model.Entities.ObjectKind.Document,
+                State = Model.Entities.WorkspaceState.Active,
+                WorkspaceId = workspace.Id,
+                ClassId = knowledge.Id,
+                Created = DateTime.UtcNow,
+                Updated = DateTime.UtcNow
+            };
 
-            Assert.Null(page.ParentId);
-            Assert.True(db.Comments.Any(c => c.ObjectId == page.Id), "expected the seeded help page to carry comments");
+            db.Objects.Add(page);
+
+            // a root document without children: the comment is what keeps it a page
+            db.Comments.Add(new Model.Entities.Comment
+            {
+                Id = Guid.NewGuid(),
+                ObjectId = page.Id,
+                AuthorId = KleeneStarDbSeeder.AdministratorId,
+                Content = "A comment that keeps the page a page.",
+                Created = DateTime.UtcNow,
+                Updated = DateTime.UtcNow
+            });
 
             workspace.HomeId = page.Id;
             await db.SaveChangesAsync();
