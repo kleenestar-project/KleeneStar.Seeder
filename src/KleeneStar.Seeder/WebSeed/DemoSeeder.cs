@@ -128,6 +128,9 @@ namespace KleeneStar.Seeder
 
             // the commit chains are built backwards from the values
             await Step(db, "commits", !db.Commits.Any(), SeedCommits);
+
+            // every start: dates an earlier seed wrote as text, in the values and their history
+            await Step(db, "date values", true, RepairDateValues);
             await Step(db, "tags", !db.ObjectTags.Any(), SeedTags);
             await Step(db, "shares and watchers", !db.ObjectShares.Any() && !db.ObjectWatchers.Any(), SeedSharesAndWatchers);
 

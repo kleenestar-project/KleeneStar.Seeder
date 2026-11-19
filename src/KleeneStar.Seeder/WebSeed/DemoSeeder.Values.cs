@@ -223,7 +223,10 @@ namespace KleeneStar.Seeder
                     return (sequence + 1).ToString(CultureInfo.InvariantCulture);
 
                 case FieldType.Date:
-                    return entity.Created.AddDays(sequence).ToString("o", CultureInfo.InvariantCulture);
+                case FieldType.Calendar:
+                case FieldType.DateRange:
+                case FieldType.CalendarRange:
+                    return DateSample(field.FieldType, entity.Created, sequence);
 
                 case FieldType.Selection:
                     if (field.Options is { Count: > 0 })

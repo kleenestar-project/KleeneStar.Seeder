@@ -1184,6 +1184,91 @@ namespace KleeneStar.Seeder.Test
         }
 
         /// <summary>
+        /// Verifies that every seeded value of a date-typed field is a date: the round-trip format
+        /// for a date or calendar field, <c>yyyy-MM-dd - yyyy-MM-dd</c> for a span.
+        /// </summary>
+        [Fact]
+        public async Task SeedDateFieldsWithDates()
+        {
+            // arrange
+            await using var db = InMemoryDbContextFactory.Create($"SeedDateFieldsWithDates_{Guid.NewGuid()}");
+
+            // act
+            await SeedAsync(db);
+
+            // validation
+            var types = new[] { Model.Entities.FieldType.Date, Model.Entities.FieldType.Calendar, Model.Entities.FieldType.DateRange, Model.Entities.FieldType.CalendarRange };
+            var fields = db.Fields.Where(x => types.Contains(x.FieldType)).ToDictionary(x => x.Id, x => x.FieldType);
+            var values = db.Values.Where(x => fields.Keys.Contains(x.FieldId)).ToList();
+
+            Assert.Contains(values, x => fields[x.FieldId] == Model.Entities.FieldType.DateRange);
+            Assert.Contains(values, x => fields[x.FieldId] == Model.Entities.FieldType.Calendar);
+
+            foreach (var value in values)
+            {
+                var parts = fields[value.FieldId] is Model.Entities.FieldType.DateRange or Model.Entities.FieldType.CalendarRange
+                    ? value.Data.Split(" - ")
+                    : [value.Data];
+
+                Assert.All(parts, x => Assert.True(DateTime.TryParse(x, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _), $"'{value.Data}' is no date"));
+            }
+        }
+
+        /// <summary>
+        /// Verifies that a text placeholder an earlier seed wrote into a date-typed field is replaced
+        /// by a date on the next start, in the value and in its history, while a value somebody
+        /// entered stays.
+        /// </summary>
+        [Fact]
+        public async Task SeedReplacesDatePlaceholders()
+        {
+            // arrange
+            var connectionString = $"SeedReplacesDatePlaceholders_{Guid.NewGuid()}";
+            Guid placeholderId, ownId;
+
+            await using (var db = InMemoryDbContextFactory.Create(connectionString))
+            {
+                await SeedAsync(db);
+
+                var timeframe = db.Fields.First(x => x.FieldType == Model.Entities.FieldType.DateRange);
+                var values = db.Values.Where(x => x.FieldId == timeframe.Id).Take(2).ToList();
+                var first = db.Objects.Single(x => x.Id == values[0].ObjectId);
+
+                values[0].Data = $"{timeframe.Name} for {first.Key}";
+                values[1].Data = "my own note";
+                placeholderId = values[0].Id;
+                ownId = values[1].Id;
+
+                foreach (var change in db.Changes.Where(x => x.FieldId == timeframe.Id && db.Commits.Any(c => c.Id == x.CommitId && c.ObjectId == first.Id)))
+                {
+                    change.NewValue = values[0].Data;
+                }
+
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+
+            // act
+            await using (var db = InMemoryDbContextFactory.Create(connectionString))
+            {
+                await SeedAsync(db);
+            }
+
+            // validation
+            await using (var db = InMemoryDbContextFactory.Create(connectionString))
+            {
+                var repaired = db.Values.Single(x => x.Id == placeholderId);
+                var parts = repaired.Data.Split(" - ");
+
+                Assert.Equal(2, parts.Length);
+                Assert.All(parts, x => Assert.True(DateTime.TryParse(x, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _)));
+                Assert.Equal("my own note", db.Values.Single(x => x.Id == ownId).Data);
+
+                var commitIds = db.Commits.Where(x => x.ObjectId == repaired.ObjectId).Select(x => x.Id).ToList();
+                Assert.DoesNotContain(db.Changes.Where(x => commitIds.Contains(x.CommitId) && x.FieldId == repaired.FieldId), x => x.NewValue != null && x.NewValue.Contains(" for "));
+            }
+        }
+
+        /// <summary>
         /// Runs the base seed and then the demo seed, the order of a host start.
         /// </summary>
         /// <param name="db">The database context.</param>
