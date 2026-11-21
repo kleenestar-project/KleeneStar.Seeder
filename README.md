@@ -24,7 +24,7 @@ The host references the plugin in the `Debug` and `DebugLocal` configurations. T
 
 ```
 dotnet build KleeneStar.Seeder/src/KleeneStar.Seeder.slnx
-KleeneStar.Seeder/src/KleeneStar.Seeder.Test/bin/Debug/net10.0/KleeneStar.Seeder.Test.exe
+KleeneStar.Seeder/src/KleeneStar.Seeder.Test/bin/Debug/net11.0/KleeneStar.Seeder.Test.exe
 ```
 
 ## For Developers
