@@ -14,15 +14,15 @@ namespace KleeneStar.Seeder
     public static partial class DemoSeeder
     {
         /// <summary>
-        /// Describes a template to seed, including its place in the two template hierarchies.
+        /// Describes a template to seed, including the hierarchy it is a node of.
         /// </summary>
         /// <param name="Name">The template name, unique within its workspace across the seeded set.</param>
         /// <param name="Description">The description, or null to inherit it.</param>
         /// <param name="Category">The category, or null to inherit it.</param>
         /// <param name="Icon">The icon uri, or null to inherit it.</param>
         /// <param name="State">The lifecycle state.</param>
-        /// <param name="Parent">The name of the template this one is a part of, or null.</param>
-        /// <param name="Order">The position among the siblings of the parent template.</param>
+        /// <param name="Parent">The name of the template rooting the hierarchy this one is a node of, or null.</param>
+        /// <param name="Order">The position among the nodes of that hierarchy.</param>
         /// <param name="Presets">The serialized field presets, or null.</param>
         private sealed record TemplateSeed
         (
@@ -38,16 +38,18 @@ namespace KleeneStar.Seeder
 
         /// <summary>
         /// Adds a predefined set of templates to the specified database context, bound to the
-        /// classes they instantiate and wired into the template hierarchy.
+        /// classes they instantiate and composed into hierarchies.
         /// </summary>
         /// <remarks>
         /// A template is the guided starting point of object creation: it carries presentation
         /// metadata (name, description, category, icon) and field presets for a class its objects
-        /// are created from. Beyond the flat set, the templates below exercise the composition
-        /// hierarchy: a template with a parent becomes a sub-object whenever an object is created
-        /// from that parent. The references are resolved in a second pass, so a template may point
-        /// at one that the first pass creates later. This method does not save changes to the
-        /// database; callers must call SaveChanges on the context to persist the additions.
+        /// are created from. Beyond the flat set, the templates below exercise composition: every
+        /// template named as a parent roots a hierarchy of its workspace, whose nodes are the
+        /// templates naming it; an object created from the hierarchy creates them as sub-objects.
+        /// The hierarchies are written in a second pass, so a template may name one that the first
+        /// pass creates later. This method does
+        /// not save changes to the database; callers must call SaveChanges on the context to
+        /// persist the additions.
         /// </remarks>
         /// <param name="db">The database context to which the templates will be added. Cannot be null.</param>
         private static void SeedTemplates(KleeneStarDbContext db)
@@ -75,7 +77,6 @@ namespace KleeneStar.Seeder
                         Category = seed.Category,
                         Icon = seed.Icon is null ? null : ImageIcon.FromString(seed.Icon),
                         State = seed.State,
-                        Order = seed.Order,
                         Presets = seed.Presets,
                         ClassId = cls.Id,
                         Created = DateTime.UtcNow,
@@ -88,10 +89,39 @@ namespace KleeneStar.Seeder
                 }
             }
 
-            // second pass: every template exists now, so the parent references resolve
-            foreach (var (seed, workspaceKey) in seeds)
+            // second pass: every template exists now; a template named as a parent roots a
+            // hierarchy of its workspace, whose nodes are the templates naming it
+            foreach (var group in seeds
+                .Where(x => Resolve(created, x.WorkspaceKey, x.Seed.Parent) is not null)
+                .GroupBy(x => Reference(x.WorkspaceKey, x.Seed.Parent), StringComparer.OrdinalIgnoreCase))
             {
-                created[Reference(workspaceKey, seed.Name)].ParentId = Resolve(created, workspaceKey, seed.Parent);
+                var root = created[group.Key];
+                var workspaceId = classes.First(c => c.Id == root.ClassId).WorkspaceId;
+                var hierarchy = new TemplateHierarchy
+                {
+                    Id = Guid.NewGuid(),
+                    Name = root.Name,
+                    Description = root.Description,
+                    Category = root.Category,
+                    Icon = root.Icon,
+                    State = TemplateState.Active,
+                    WorkspaceId = workspaceId,
+                    RootTemplateId = root.Id,
+                    Created = DateTime.UtcNow,
+                    Updated = DateTime.UtcNow
+                };
+
+                db.TemplateHierarchies.Add(hierarchy);
+
+                foreach (var (seed, workspaceKey) in group.OrderBy(x => x.Seed.Order))
+                {
+                    db.TemplateHierarchyNodes.Add(new TemplateHierarchyNode
+                    {
+                        HierarchyId = hierarchy.Id,
+                        TemplateId = created[Reference(workspaceKey, seed.Name)].Id,
+                        Order = seed.Order
+                    });
+                }
             }
         }
 
@@ -107,7 +137,7 @@ namespace KleeneStar.Seeder
         }
 
         /// <summary>
-        /// Resolves a hierarchy reference of a seeded template to the id it points at.
+        /// Resolves the parent a seeded template names to the id of that template.
         /// </summary>
         /// <param name="created">The templates created by the first pass.</param>
         /// <param name="workspaceKey">The key of the workspace the reference is resolved within.</param>
@@ -191,7 +221,7 @@ namespace KleeneStar.Seeder
                         Presets: """{"Priority":"Medium","EstimatedHours":"4"}"""),
 
                     // the three steps of the release checklist below; each becomes an object
-                    // beneath the release when one is created from "Release Checklist"
+                    // beneath the release when one is created from the hierarchy "Release Checklist"
                     new("Cut Release Branch", "Branch off and freeze the release candidate.", "Delivery", "/kleenestar/assets/icons/repo.svg",
                         Parent: "Release Checklist", Order: 1),
                     new("Run Regression Suite", "Execute the full regression suite against the candidate.", "Delivery", "/kleenestar/assets/icons/build.svg",
@@ -215,7 +245,7 @@ namespace KleeneStar.Seeder
                     new("Internal Transfer", "Move a colleague to another team or position.", "HR & Onboarding", "/kleenestar/assets/icons/onboarding.svg"),
 
                     // the onboarding steps; each becomes an object beneath the onboarding when one
-                    // is created from "New Employee"
+                    // is created from the hierarchy "New Employee"
                     new("Prepare Workplace", "Order desk, hardware and access badge.", "HR & Onboarding", "/kleenestar/assets/icons/asset.svg",
                         Parent: "New Employee", Order: 1,
                         Presets: """{"Priority":"High","EstimatedHours":"2"}"""),
