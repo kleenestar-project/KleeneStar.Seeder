@@ -13,7 +13,6 @@ namespace KleeneStar.Seeder.Test
     /// <see cref="DemoSeed"/>, the store check <see cref="DemoSeeder.AppliesTo"/> and the audit
     /// event of a demo run.
     /// </summary>
-    [Collection("NonParallelTests")]
     public class UnitTestDemoSeed
     {
         /// <summary>

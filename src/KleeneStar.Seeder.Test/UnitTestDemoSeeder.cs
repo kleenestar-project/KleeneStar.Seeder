@@ -6,7 +6,6 @@ namespace KleeneStar.Seeder.Test
     /// <summary>
     /// Contains unit tests for the demo data (<see cref="DemoSeeder"/>) on top of the base seed.
     /// </summary>
-    [Collection("NonParallelTests")]
     public class UnitTestDemoSeeder
     {
         /// <summary>
@@ -278,7 +277,7 @@ namespace KleeneStar.Seeder.Test
 
             // validation
             Assert.True(db.SlaPolicies.Any(), "expected at least one SLA policy");
-            Assert.True(db.SlaTargets.Any(),  "expected at least one SLA target");
+            Assert.True(db.SlaTargets.Any(), "expected at least one SLA target");
 
             // each seeded class should have at least one policy, except the Page classes of the
             // home pages
@@ -1098,7 +1097,7 @@ namespace KleeneStar.Seeder.Test
                 Assert.Empty(db.PermissionAssignments);
             }
         }
-    
+
 
         /// <summary>
         /// Verifies that every seeded workspace gets its home page: a document of its own, named
