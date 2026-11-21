@@ -1,0 +1,3 @@
+﻿# en-US language resource file
+plugin.name=KleeneStar.Seeder
+plugin.description=Demonstration and test data for KleeneStar: tenants, accounts, seven workspaces with their structure and objects.
